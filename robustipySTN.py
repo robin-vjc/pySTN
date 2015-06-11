@@ -3,7 +3,7 @@ Implementation of a scheduling system based on the STN model.
 """
 
 import numpy as np
-import cxvpy as cvx
+import cvxpy as cvx
 
 class NominalSTN(object):
     def __init__(self):
@@ -65,30 +65,71 @@ class NominalSTN(object):
         # objective to maximize (revenue from the states)
         c = np.array([0, 0, 0, -1, -1, -1, -1, 10, 10])
 
+        # Optimization problem structure
+        self.problem = 0
+
+
     def construct_nominal_model(self):
         """ constructs the standard model for the STN
         :return: list(A_eq, b_eq, A_ineq, b_ineq, c, int_index) """
-        I_size = self.units.__len__()
-        J_size = self.tasks.__len__()
-        S_size = self.states.__len__()
+        I = self.units.__len__()
+        J = self.tasks.__len__()
+        S = self.states.__len__()
+        T = self.T
+
+        # TODO BIG-M for allocation
+        BIG_M = 4
 
         # Variables
         # ---------
-        x_ijt = cvx.Variable(I_size, J_size, self.T)  # allocation variable (bool)
-        y_ijt = cvx.Variable(I_size, J_size, self.T)  # batchsize
-        # TODO maybe not used:
-        y_st = cvx.Variable(S_size, self.T)  # state quantity
+        x_ijt = {}  # allocation variable (bool)
+        y_ijt = {}  # batch size [kg]
+        y_st = {}   # state quantity [kg]
+        for t in range(self.T):
+            for i in range(I):
+                for j in range(J):
+                    # x_ijt[(i,j,t)] = cvx.Bool()
+                    x_ijt[(i,j,t)] = cvx.Variable()
+                    y_ijt[(i,j,t)] = cvx.Variable()
+            # TODO maybe not used:
+            for s in range(S):
+                y_st[(s,t)] = cvx.Variable()
 
         # Constraints
         # -----------
+        # Unit allocation
+        cstr_allocation = []
+        for i in range(I):
+            for t in range(T):
+                cstr_allocation.append( sum( [x_ijt[(i,j,t)] for j in range(J)] ) <= 1 )
+            for j in range(J):
+                for t in range(T-self.P_j[j]):
+                    cstr_allocation.append(
+                        sum ( sum( [[x_ijt[(i,jj,tt)] for jj in range(J)] for tt in range(2)], [] ) )
+                        <=
+                        self.P_j[j]*BIG_M*(1 - x_ijt[(i,j,t)]) +1
+                    )
 
+        # Box constraints (for testing)
+        cstr_box = []
+        for i in range(I):
+            for j in range(J):
+                for t in range(T):
+                    cstr_box.append( [0 <= x_ijt[(i,j,t)],
+                                      x_ijt[(i,j,t)] <= 1,
+                                      0 <= y_ijt[(i,j,t)],
+                                      y_ijt[(i,j,t)] <= 1] )
 
+        # Objective
+        # ---------
+        objective = cvx.Maximize(x_ijt[(1,1,1)])
 
-
+        self.problem = cvx.Problem(objective, cstr_box)
 
 
 def main():
-    pass
+    model = NominalSTN()
+    model.construct_nominal_model()
 
 
 if __name__ == '__main__':
