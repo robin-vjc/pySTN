@@ -8,7 +8,7 @@ import cvxpy as cvx
 # We pack everything in a class, mainly to avoid having to implement functions (now the
 # class methods) with very long signatures (can just pass in self, which contains all
 # the data).
-class NominalSTN(object):
+class STN(object):
     def __init__(self):
         # Definition of the STN (order in the list matters!)
         self.units = ['Heater', 'Reactor 1', 'Reactor 2', 'Column']
@@ -68,7 +68,7 @@ class NominalSTN(object):
         self.C_min = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0])
 
         # objective to maximize (revenue from the states)
-        c = np.array([0, 0, 0, -1, -1, -1, -1, 10, 10])
+        self.c = np.array([0, 0, 0, -1, -1, -1, -1, 10, 10])
 
         # Optimization problem structure
         self.problem = 0
@@ -81,8 +81,7 @@ class NominalSTN(object):
         for t in range(self.T):
             for i in range(self.I):
                 for j in range(self.J):
-                    # x_ijt[(i,j,t)] = cvx.Bool()
-                    self.x_ijt[i,j,t] = cvx.Variable()
+                    self.x_ijt[i,j,t] = cvx.Bool()
                     self.y_ijt[i,j,t] = cvx.Variable()
         # state equations are eliminated to allow for the robust counterpart. We only store
         # the iniatial state y_s(t=0), which we name y_s
@@ -167,58 +166,63 @@ class NominalSTN(object):
                 constraint_state_eq.append( self.y_s[s] == 0 )
 
         # 2) state equations and storage capacities
+        ## TODO version with shifted index has two ##
         for t in range(1,self.T):
+        ## for t in range(self.T):
             for s in range(self.S):
                 self.y_st_inflow[s,t] = 0
                 self.y_st_outflow[s,t] = 0
 
+                for i in range(self.I):
+                    for j in range(self.J):
+                        if self.J_i[i,j]:
+                            # set inflows
+                            if (t-self.P[j,s] >= 1):
+                            ##if (t-self.P[j,s] >= 0):
+                                self.y_st_inflow[s,t] += self.rho_out[j,s]*self.y_ijt[i,j,t-self.P[j,s]]
+                            # set outflows
+                            self.y_st_outflow[s,t] += self.rho_in[j,s]*self.y_ijt[i,j,t]
 
-# for t=2:T
-#     for s=1:S.size
-#         help_stp(s,t) = 0;
-#         help_stm(s,t) = 0;
-#         for i = 1:I.size
-#             for j = 1:J.size
-#                 if J_i(i,j)
-#                     if (t-P_js(j,s)>=1)
-#                         help_stp(s,t) = help_stp(s,t) + rho_out_js(j,s)*y_ijt(i,j,t-P_js(j,s));
-#                     end
-#                     help_stm(s,t) = help_stm(s,t) - rho_in_js(j,s) * y_ijt(i,j,t);
-#                 end
-#             end
-#         end
-#
-#         constr_state = [constr_state, 0<= y_st(s,1) + sum(help_stp(s,2:t)) + sum(help_stm(s,2:t)) <= capty_s(s)];
-#     end
-# end
+                constraint_state_eq.append( self.C_min[s] <= self.y_s[s]
+                                            + sum( [self.y_st_inflow[(s,tt)] for tt in range(1,t)] )
+                                            - sum( [self.y_st_outflow[(s,tt)] for tt in range(1,t)] ))
+                                            ##+ sum( [self.y_st_inflow[(s,tt)] for tt in range(t)] )
+                                            ##- sum( [self.y_st_outflow[(s,tt)] for tt in range(t)] ))
 
+                constraint_state_eq.append( self.C_max[s] >= self.y_s[s]
+                                            + sum( [self.y_st_inflow[(s,tt)] for tt in range(1,t)] )
+                                            - sum( [self.y_st_outflow[(s,tt)] for tt in range(1,t)] ))
+                                            ##+ sum( [self.y_st_inflow[(s,tt)] for tt in range(t)] )
+                                            ##- sum( [self.y_st_outflow[(s,tt)] for tt in range(t)] ))
 
+        return constraint_state_eq
+
+    def construct_objective(self):
+        return sum( [self.c[s]*( sum([self.y_st_inflow[s,tt] for tt in range(1,self.T)])
+                                 - sum([self.y_st_outflow[s,tt] for tt in range(1,self.T)]))
+                     for s in range(self.S)] )
 
     def construct_nominal_model(self):
-        """ constructs the standard model for the STN
-        :return: list(A_eq, b_eq, A_ineq, b_ineq, c, int_index) """
+        """ constructs the standard model for the STN """
 
         # Constraints
         # -----------
         constraints = []
-        # Unit allocation
         constraints.append(self.construct_allocation_constraint())
-        # Box constraints (for testing with continuous variables)
-        constraints.append(self.construct_box_constraint())
-        # Unit capacity
+        # constraints.append(self.construct_box_constraint())  # for testing with continuous variables
         constraints.append(self.construct_units_capacity_constraint())
-
+        constraints.append(self.construct_state_equations_and_storage_constraint())
         constraints = sum(constraints, [])
 
         # Objective
         # ---------
-        objective = cvx.Maximize(self.x_ijt[(1,1,1)])
+        objective = cvx.Maximize(self.construct_objective())
 
         self.problem = cvx.Problem(objective, constraints)
 
 
 def main():
-    model = NominalSTN()
+    model = STN()
     model.construct_nominal_model()
 
 
