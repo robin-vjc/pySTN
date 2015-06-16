@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 
 class STN(object):
     def __init__(self):
+        # Data
+        # ----
         # Definition of the STN (order in the list matters!)
         self.units = ['Heater', 'Reactor 1', 'Reactor 2', 'Column']
         self.tasks = ['Heat', 'Rea. 1', 'Rea. 2', 'Rea. 3', 'Sep.']
@@ -73,32 +75,55 @@ class STN(object):
         # objective to maximize (revenue from the states)
         self.c = np.array([0, 0, 0, -1, -1, -1, -1, 10, 10])
 
-        # Optimization problem structure
+        # Optimization problem structure (cvx.Problem type)
         self.model = 0
 
-        # Variables
-        # ---------
+        # Optimization Variables
+        # ----------------------
         self.x_ijt = {}  # allocation variable (bool)
         self.y_ijt = {}  # batch size [kg]
         self.y_s = {}   # state quantity [kg]
-        for t in range(self.T):
-            for i in range(self.I):
-                for j in range(self.J):
+        for i in range(self.I):
+            for j in range(self.J):
+                for t in range(self.T):
                     self.x_ijt[i,j,t] = cvx.Bool()
+        # we separate creation of x_ijt and y_ijt in two loops, so that the optimization variables
+        # in the standard model do not get mixed up
+        for i in range(self.I):
+            for j in range(self.J):
+                for t in range(self.T):
                     self.y_ijt[i,j,t] = cvx.Variable()
         # state equations are eliminated to allow for the robust counterpart. We only store
-        # the iniatial state y_s(t=0), which we name y_s
+        # the initial state y_s(t=0), which we name y_s
         for s in range(self.S):
             self.y_s[s] = cvx.Variable()
         # auxiliary expressions used in the state equations
         self.y_st_inflow = {}
         self.y_st_outflow = {}
-        # local variables to store results
+
+        # Attributes
+        # ----------
+        # to store results
         self.X_ijt = np.zeros((self.I,self.J,self.T))
         self.Y_ijt = np.zeros((self.I,self.J,self.T))
         self.Y_st = np.zeros((self.S,self.T))
         self.Y_st_inflow = np.zeros((self.S,self.T))
         self.Y_st_outflow = np.zeros((self.S,self.T))
+        # to store the standard model
+        # min   c_x'*x + c_y'*y
+        # s.t.  A_eq*x + B_eq*y = b_eq
+        #       A_ineq*x + B_ineq*y <= b_ineq
+        #       x \in {0,1}
+        self.c_x = 0
+        self.c_y = 0
+        self.A_eq = 0
+        self.A_ineq = 0
+        self.B_eq = 0
+        self.B_ineq = 0
+        self.b_eq = 0
+        self.b_ineq = 0
+        self.bool_ix = 0
+        self.cont_ix = 0
 
     def construct_allocation_constraint(self):
         ''' construct the allocation constraints:
@@ -227,6 +252,7 @@ class STN(object):
         a cvx.Problem type. Constraints can be added/removed here.
         :return: None
         """
+        print 'Constructing model...'
         # Constraints
         # -----------
         constraints = []
@@ -241,7 +267,34 @@ class STN(object):
         # ---------
         objective = cvx.Maximize(self.construct_objective())
 
+        # Model
+        # -----
         self.model = cvx.Problem(objective, constraints)
+        # Also store the matrices of te standard model:
+        data = self.model.get_problem_data('ECOS_BB')
+        self.retrieve_standard_model(data)
+
+    def retrieve_standard_model(self, data):
+        """ Here we store the problem matrices (A_eq, B_eq, b_eq, etc) with ordered columns.
+        :param data: dictionary, as returned by cvx.Problem.get_problem_data('ECOS_BB')
+        :return: None
+        """
+        n = data['c'].shape[0]
+        self.bool_ix = data['bool_vars_idx']
+        self.cont_ix = list(set(range(n)) - set(data['bool_vars_idx']))
+        self.n_x = self.bool_ix.__len__()
+        self.n_y = self.cont_ix.__len__()
+        range_bool_ix = range(self.n_x)
+        range_cont_ix = range(self.n_x, self.n_x+self.n_y)
+        self.c_x = data['c'][range_bool_ix]
+        self.c_y = data['c'][range_cont_ix]
+        self.A_eq = data['A'][:,range_bool_ix]
+        self.B_eq = data['A'][:,range_cont_ix]
+        self.b_eq = data['b']
+        self.A_ineq = data['G'][:,range_bool_ix]
+        self.B_ineq = data['G'][:,range_cont_ix]
+        self.b_ineq = data['h']
+        self.b_ineq = data['h']
 
     def solve(self):
         """ Constructs and solved the nominal STN model. The solution is stored in the np.arrays
@@ -252,6 +305,7 @@ class STN(object):
         :return: optimal value (float)
         """
         self.construct_nominal_model()
+        print 'Solving...'
         self.model.solve(verbose=True, solver='GUROBI')
         self.unpack_results()
         return self.model.value
