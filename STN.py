@@ -220,28 +220,29 @@ class STN(object):
                                                       - sum([self.y_st_outflow[s,tt].value for tt in range(t+1)]))
 
     def plot_schedule(self):
-        ## TODO warning if problem is not solved
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        ax.set_aspect(1)
-        for i, unit in enumerate(self.Y_ijt):
-            for j, task in enumerate(unit):
-                for t, time in enumerate(task):
-                    if t < self.T:
-                        slot_x = np.array([t, t+1])
-                        slot_y = np.array([i, i])
-                        slot_y2 = slot_y+1
-                        slot_y3 = np.array([i, i+1])
-                        # don't plot blocks where Y_ijt is just some epsilon, residual of the optimization
-                        if self.Y_ijt[i,j,t] >= 1:
-                            plt.fill_between(slot_x, slot_y, y2=slot_y2, color='red')
-                            plt.text(np.mean(slot_x), np.mean(slot_y3), "{0}\n{1}".format(self.Y_ijt[i,j,t], self.tasks[j]),
-                                     horizontalalignment='center', verticalalignment='center' )
+            ## TODO warning if problem is not solved
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.set_aspect(1)
+            for i, unit in enumerate(self.Y_ijt):
+                for j, task in enumerate(unit):
+                    for t, time in enumerate(task):
+                        if t < self.T:
+                            slot_x = np.array([t+0.03, t+self.P_j[j]-0.03])
+                            slot_y = np.array([i+0.03, i+0.03])
+                            slot_y2 = slot_y+0.93
+                            slot_y3 = np.array([i, i+1])
+                            # don't plot blocks where Y_ijt is just some epsilon, residual of the optimization
+                            if self.Y_ijt[i,j,t] >= 1:
+                                plt.fill_between(slot_x, slot_y, y2=slot_y2, color='red')
+                                plt.text(np.mean(slot_x), np.mean(slot_y3), "{0}\n{1}".format(self.Y_ijt[i,j,t], self.tasks[j]),
+                                         horizontalalignment='center', verticalalignment='center' )
+                                plt.text(-0.15, np.mean(slot_y3), "{0}".format(self.units[i]), horizontalalignment='right', verticalalignment='center')
 
-        # plt.ylim(self.I, 0)
-        plt.yticks(range(self.I), self.units, verticalalignment='center')
-        plt.minorticks_on()
-        plt.show()
+            plt.ylim(self.I, 0)
+            plt.xlabel('time [h]')
+            plt.yticks(range(self.I), "", y=0.5)
+            plt.show()
 
     def construct_nominal_model(self):
         """ constructs the standard model for the STN """
@@ -253,7 +254,6 @@ class STN(object):
         constraints.append(self.construct_state_equations_and_storage_constraint())
         # can force Kondili's solution with
         # constraints.append(self.construct_konidili_solution_enforce())
-
         constraints = sum(constraints, [])
 
         # Objective
@@ -271,4 +271,3 @@ if __name__ == '__main__':
     model = STN()
     model.solve()
     model.plot_schedule()
-
