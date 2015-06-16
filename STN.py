@@ -1,14 +1,16 @@
 """
-Implementation of a scheduling system based on the STN model.
+Implementation of a scheduling system based on the STN model. The data of the problem is
+in the __init__() method, and can be changed. Additional constraints can be included as functions
+that return cvx.Constraints, and added in the STN.construst_nominal_model() method.
+
+We pack everything in a class to avoid having to implement functions (now the class methods)
+with exceedingly long signatures.
 """
 
 import numpy as np
 import cvxpy as cvx
 import matplotlib.pyplot as plt
 
-# We pack everything in a class, mainly to avoid having to implement functions (now the
-# class methods) with very long signatures (can just pass in self, which contains all
-# the data).
 class STN(object):
     def __init__(self):
         # Definition of the STN (order in the list matters!)
@@ -72,7 +74,7 @@ class STN(object):
         self.c = np.array([0, 0, 0, -1, -1, -1, -1, 10, 10])
 
         # Optimization problem structure
-        self.problem = 0
+        self.model = 0
 
         # Variables
         # ---------
@@ -102,7 +104,7 @@ class STN(object):
         ''' construct the allocation constraints:
             1) each unit i is processing at most one task j at each t
             2) units can only perform tasks that are compatible with self.J_i
-        :return: list of constraints
+        :return: list of cvx.Constraint
         '''
         I = self.units.__len__()
         J = self.tasks.__len__()
@@ -135,6 +137,10 @@ class STN(object):
         return constraint_allocation
 
     def construct_box_constraint(self):
+        """ Construct box constraints on x_ijt and y_ijt; useful for testing with continuous
+        variables instead of bools.
+        :return: list of cvx.Constraint
+        """
         I = self.units.__len__()
         J = self.tasks.__len__()
         T = self.T
@@ -150,6 +156,10 @@ class STN(object):
         return constraint_box
 
     def construct_units_capacity_constraint(self):
+        """ Ensure maximum and minimum sizes of the batches to be processed are within
+        unit constraints.
+        :return: list of cvx.Constraint
+        """
         constraint_capacity = []
         for i in range(self.I):
             for j in range(self.J):
@@ -160,7 +170,9 @@ class STN(object):
         return constraint_capacity
 
     def construct_state_equations_and_storage_constraint(self):
-        # implementation of state equations, and states capacities (storages)
+        """ Implementation of state equations, and states capacities (storages)
+        :return: list of cvx.Constraint
+        """
         constraint_state_eq = []
         # 1) every intermediate / output state starts with a quantity of 0 kg
         for s in range(self.S):
@@ -192,60 +204,29 @@ class STN(object):
         return constraint_state_eq
 
     def construct_konidili_solution_enforce(self):
-        """ the nominal model with the data of Kondili's paper has several optimizers. The following
-        constraints force the exact same solution as in the paper (the objective is unaffected) """
+        """ The nominal model with the data of Kondili's paper has several optimizers. The following
+        constraints force the exact same solution as in the paper (the objective is unaffected)
+        :return: list of cvx.Constraint
+        """
         constraint_kondili = []
         constraint_kondili.append( [self.y_ijt[0,0,1] == 52] )
         constraint_kondili.append( [self.y_ijt[1,1,0] == 80] )
         return constraint_kondili
 
     def construct_objective(self):
+        """ Objective encodes c'*(y_s(t=end)-y_s(t=0)), i.e., value of the final products minus
+        cost of the input feeds.
+        :return: cvx.Objective
+        """
         return sum( [self.c[s]*( sum([self.y_st_inflow[s,t] for t in range(self.T)])
                                  - sum([self.y_st_outflow[s,t] for t in range(self.T)]))
                      for s in range(self.S)] )
 
-    def unpack_results(self):
-        ''' once model is solved, transform the solution dictionaries into np.arrays for
-        easier inspection/plotting '''
-        for t in range(self.T):
-            for j in range(self.J):
-                for i in range(self.I):
-                    self.X_ijt[i,j,t] = self.x_ijt[i,j,t].value
-                    self.Y_ijt[i,j,t] = self.y_ijt[i,j,t].value
-        for t in range(self.T):
-            for s in range(self.S):
-                self.Y_st_inflow[s,t] = self.y_st_inflow[s,t].value
-                self.Y_st_outflow[s,t] = self.y_st_outflow[s,t].value
-                self.Y_st[s,t] = self.y_s[s].value + (sum([self.y_st_inflow[s,tt].value for tt in range(t+1)])
-                                                      - sum([self.y_st_outflow[s,tt].value for tt in range(t+1)]))
-
-    def plot_schedule(self):
-            ## TODO warning if problem is not solved
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
-            ax.set_aspect(1)
-            for i, unit in enumerate(self.Y_ijt):
-                for j, task in enumerate(unit):
-                    for t, time in enumerate(task):
-                        if t < self.T:
-                            slot_x = np.array([t+0.03, t+self.P_j[j]-0.03])
-                            slot_y = np.array([i+0.03, i+0.03])
-                            slot_y2 = slot_y+0.93
-                            slot_y3 = np.array([i, i+1])
-                            # don't plot blocks where Y_ijt is just some epsilon, residual of the optimization
-                            if self.Y_ijt[i,j,t] >= 1:
-                                plt.fill_between(slot_x, slot_y, y2=slot_y2, color='red')
-                                plt.text(np.mean(slot_x), np.mean(slot_y3), "{0}\n{1}".format(self.Y_ijt[i,j,t], self.tasks[j]),
-                                         horizontalalignment='center', verticalalignment='center' )
-                                plt.text(-0.15, np.mean(slot_y3), "{0}".format(self.units[i]), horizontalalignment='right', verticalalignment='center')
-
-            plt.ylim(self.I, 0)
-            plt.xlabel('time [h]')
-            plt.yticks(range(self.I), "", y=0.5)
-            plt.show()
-
     def construct_nominal_model(self):
-        """ constructs the standard model for the STN """
+        """ Constructs the nominal STN model, and saves it in the class attribute self.model as
+        a cvx.Problem type. Constraints can be added/removed here.
+        :return: None
+        """
         # Constraints
         # -----------
         constraints = []
@@ -260,12 +241,76 @@ class STN(object):
         # ---------
         objective = cvx.Maximize(self.construct_objective())
 
-        self.problem = cvx.Problem(objective, constraints)
+        self.model = cvx.Problem(objective, constraints)
 
     def solve(self):
+        """ Constructs and solved the nominal STN model. The solution is stored in the np.arrays
+        - STN.X_ijt (assignments, bool)
+        - STN.Y_ijt (batch sizes, float)
+        - STN.Y_st (material quantities, float)
+        - STN.Y_st_inflow and Y_st_outflow (material flows, float)
+        :return: optimal value (float)
+        """
         self.construct_nominal_model()
-        self.problem.solve(verbose=True, solver='GUROBI')
+        self.model.solve(verbose=True, solver='GUROBI')
         self.unpack_results()
+        return self.model.value
+
+    def unpack_results(self):
+        """ Once model is solved, transform the solution dictionaries (self.x_ijt, self.y_ijt) into
+        np.arrays for easier inspection/plotting. The np.arrays are saved within the instance attributes
+        - STN.X_ijt (assignments, bool)
+        - STN.Y_ijt (batch sizes, float)
+        - STN.Y_st (stored material quantities, float)
+        - STN.Y_st_inflow and STN.Y_st_outflow (material flows, float),
+        and can be accessed from there once the method is executed.
+        :return: None
+        """
+        for t in range(self.T):
+            for j in range(self.J):
+                for i in range(self.I):
+                    self.X_ijt[i,j,t] = self.x_ijt[i,j,t].value
+                    self.Y_ijt[i,j,t] = self.y_ijt[i,j,t].value
+        for t in range(self.T):
+            for s in range(self.S):
+                self.Y_st_inflow[s,t] = self.y_st_inflow[s,t].value
+                self.Y_st_outflow[s,t] = self.y_st_outflow[s,t].value
+                self.Y_st[s,t] = self.y_s[s].value + (sum([self.y_st_inflow[s,tt].value for tt in range(t+1)])
+                                                      - sum([self.y_st_outflow[s,tt].value for tt in range(t+1)]))
+
+    def plot_schedule(self):
+        """ Plot the nominal schedule.
+        :return: None
+        """
+        color = 'red'
+        margin = 0.03  # size of margins around the boxes
+
+        if  not self.X_ijt.all():
+            print 'Please, solve model first by invoking STN.solve()'
+        else:
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.set_aspect(1)
+            for i, unit in enumerate(self.Y_ijt):
+                for j, task in enumerate(unit):
+                    for t, time in enumerate(task):
+                        if t < self.T:
+                            slot_x = np.array([t+margin, t+self.P_j[j]-margin])
+                            slot_y = np.array([i+margin, i+margin])
+                            slot_y2 = slot_y+0.90+margin
+                            slot_y3 = np.array([i, i+1])
+                            # don't plot blocks where Y_ijt is just some epsilon, residual of the optimization
+                            if self.Y_ijt[i,j,t] >= 1:
+                                plt.fill_between(slot_x, slot_y, y2=slot_y2, color=color)
+                                plt.text(np.mean(slot_x), np.mean(slot_y3), "{0}\n{1}".format(self.Y_ijt[i,j,t], self.tasks[j]),
+                                         horizontalalignment='center', verticalalignment='center' )
+                                plt.text(-0.15, np.mean(slot_y3), "{0}".format(self.units[i]),
+                                         horizontalalignment='right', verticalalignment='center')
+
+            plt.ylim(self.I, 0)
+            plt.xlabel('time [h]')
+            plt.yticks(range(self.I), "", y=0.5)
+            plt.show()
 
 if __name__ == '__main__':
     model = STN()
