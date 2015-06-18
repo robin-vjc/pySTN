@@ -124,6 +124,8 @@ class STN(object):
         self.b_ineq = 0
         self.bool_ix = 0
         self.cont_ix = 0
+        self.m_eq = 0
+        self.m_ineq = 0
 
     def construct_allocation_constraint(self):
         ''' construct the allocation constraints:
@@ -243,7 +245,7 @@ class STN(object):
         cost of the input feeds.
         :return: cvx.Objective
         """
-        return sum( [self.c[s]*( sum([self.y_st_inflow[s,t] for t in range(self.T)])
+        return - sum( [self.c[s]*( sum([self.y_st_inflow[s,t] for t in range(self.T)])
                                  - sum([self.y_st_outflow[s,t] for t in range(self.T)]))
                      for s in range(self.S)] )
 
@@ -265,7 +267,7 @@ class STN(object):
 
         # Objective
         # ---------
-        objective = cvx.Maximize(self.construct_objective())
+        objective = cvx.Minimize(self.construct_objective())
 
         # Model
         # -----
@@ -295,6 +297,8 @@ class STN(object):
         self.B_ineq = data['G'][:,range_cont_ix]
         self.b_ineq = data['h']
         self.b_ineq = data['h']
+        self.m_eq = self.A_eq.shape[0]
+        self.m_ineq = self.A_ineq.shape[0]
 
     def solve(self):
         """ Constructs and solved the nominal STN model. The solution is stored in the np.arrays
@@ -336,30 +340,31 @@ class STN(object):
         """ Plot the nominal schedule.
         :return: None
         """
+        # TODO you should plot the attained objective, and also (maybe) the states evolution, divided in input/int/output
         color = 'red'
         margin = 0.03  # size of margins around the boxes
 
-        if  not self.X_ijt.all():
+        if not self.X_ijt.any():
             print 'Please, solve model first by invoking STN.solve()'
         else:
             fig = plt.figure()
             ax = fig.add_subplot(111)
             ax.set_aspect(1)
             for i, unit in enumerate(self.Y_ijt):
+                unit_axis = np.array([i, i+1])
                 for j, task in enumerate(unit):
                     for t, time in enumerate(task):
                         if t < self.T:
                             slot_x = np.array([t+margin, t+self.P_j[j]-margin])
                             slot_y = np.array([i+margin, i+margin])
                             slot_y2 = slot_y+0.90+margin
-                            slot_y3 = np.array([i, i+1])
                             # don't plot blocks where Y_ijt is just some epsilon, residual of the optimization
                             if self.Y_ijt[i,j,t] >= 1:
                                 plt.fill_between(slot_x, slot_y, y2=slot_y2, color=color)
-                                plt.text(np.mean(slot_x), np.mean(slot_y3), "{0}\n{1}".format(self.Y_ijt[i,j,t], self.tasks[j]),
+                                plt.text(np.mean(slot_x), np.mean(unit_axis), "{0}\n{1}".format(self.Y_ijt[i,j,t], self.tasks[j]),
                                          horizontalalignment='center', verticalalignment='center' )
-                                plt.text(-0.15, np.mean(slot_y3), "{0}".format(self.units[i]),
-                                         horizontalalignment='right', verticalalignment='center')
+                plt.text(-0.15, np.mean(unit_axis), "{0}".format(self.units[i]),
+                         horizontalalignment='right', verticalalignment='center')
 
             plt.ylim(self.I, 0)
             plt.xlabel('time [h]')

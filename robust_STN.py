@@ -17,31 +17,22 @@ class robust_STN(object):
         :type stn: STN
         """
         self.stn = stn
+        self.m = self.stn.m_eq + self.stn.m_ineq
 
-        # uncertainty sets are stored as matrices, within a list of length n_x (number of bools
-        # in the problem).
-        self.W_k = [0 for x in range(self.stn.n_x)]
+        # Optimization Variables
+        # ----------------------
+        self.x = cvx.Bool(self.stn.n_x, 1)
+        self.v = cvx.Variable(self.stn.n_y, 1)
+        self.Y = cvx.Variable(self.stn.n_y, self.stn.n_x)  # recourse matrix
+        # for the auxiliary vars Phi and Psi we work with dictionaries to have sparse representations
+        self.Phi = {}
+        self.Psi = {}
+        # TODO BIG-M for Psi_bar
+        self.Psi_bar = 10000*np.ones((self.m,1))
 
-    def build_uncertainty_set_for_unit_delay(self, units='Heater', tasks='Heat', delay=1, from_t=0, to_t=None):
-        """ Returns the uncertainty sets corresponding to possible delays of any task (in `tasks') executed
-        on a unit (in `units'). The delays amount to `delay' time steps.
-        :param units: a (list of) units from STN.units (string)
-        :param tasks: a (list of) tasks from STN.tasks (string)
-        :param delay: time delay, in steps (int)
-        :param from_t: delays may occur from time step ``from_t'' (int)
-        :param to_t: delays may occur only upt to time step ''to_t'' (int)
-        :return: list of matrices [W_k], k=0,...,n_x-1
-        """
-        if to_t is None:
-            to_t = self.stn.T
-
-        units =
-        for t in range(self.stn.T):
-
-            # create a column in W_k (where k is the appropriate index, where you have the -1)
-
-
-
+        # uncertainty sets are stored as matrices, within a list of length n_x
+        # (number of bools in the problem).
+        self.W = [0 for x in range(self.stn.n_x)]
 
     def x_ijt_index_to_std(self, x_ijt_ix):
         """ transforms the [i,j,t] index of the variable x_ijt in the index of the optimization variable
@@ -64,3 +55,96 @@ class robust_STN(object):
         j = int(remainder/(self.stn.T))
         t = int(remainder%(self.stn.T))
         return [i,j,t]
+
+    def build_uncertainty_set_for_unit_delay(self, units=(0,), tasks=(0,), delay=1, from_t=0, to_t=None):
+        # TODO fix doc, it's tuple; you need a comma at the end if it is one single unit (cannot iterate otherwise)
+        """ Returns the uncertainty sets corresponding to possible delays of any task (in `tasks') executed
+        on a unit (in `units'). The delays amount to up to `delay' time steps. Note: this is not equivalent to
+        delays of exactly `delay' time steps, the ``up to'' is important. A version for `exact delays', which
+        for instance can model the swapping of a certain operation from day to night is also possible.
+        :param units: a (list of) unit(s) from STN.units (string); default='Heater'
+        :param tasks: a (list of) task(s) from STN.tasks (string); default='Heat'
+        :param delay: time delay, in steps (int); default=1
+        :param from_t: delays may occur from time step ``from_t'' (int); default=0
+        :param to_t: delays may occur only upt to time step ''to_t'' (int); default=STN.T
+        :return: list of matrices [W_k], k=0,...,n_x-1
+        """
+        if to_t is None:
+            to_t = self.stn.T-delay
+
+        W = [0 for x in range(self.stn.n_x)]
+
+        for i in units:
+            for j in tasks:
+                for t in range(from_t, to_t):
+                    W_k = np.zeros((self.stn.n_x, delay+1))
+                    # one column of the W_k matrix should always be 0, to encode that no event occurs;
+                    # declaration left for clarity
+                    W_k[:,0] = 0
+                    # on to the other columns of W_k
+                    for col in range(1, delay+1):
+                        # index where we place the ``-1'' and ``+1''
+                        minus_index = self.x_ijt_index_to_std([i,j,t])
+                        plus_index = self.x_ijt_index_to_std([i,j,t+col])
+                        # uncertainty vector w is -1 at (i,j,t), and +1 at (i,j,t+1)
+                        w = np.zeros(self.stn.n_x)
+                        w[minus_index] = -1
+                        w[plus_index] = +1
+                        W_k[:,col] = w
+
+                    # assign matrix to the collection (list) of uncertainties
+                    W[minus_index] = W_k
+        # we return the value (and do not change self.W from within the method), since one may want
+        # to combine several different W's before computing the RC
+        return W
+
+    def build_robust_counterpart(self):
+        # fill in the required columns in Phi and Psi (can only be done after a W is constructed)
+        k_ix = []  # list of indices with non-zero entries in W[k_ix]
+        for k in range(self.stn.n_x):
+            if np.any(self.W[k]):
+                # TODO do I need to iterate or can I assign a vector?
+                self.Phi[k] = cvx.Variable(self.m,1)
+                self.Psi[k] = cvx.Variable(self.m,1)
+                k_ix.append(k)
+
+        # Aggregate Nominal Model
+        # -----------------------
+        A = np.vstack((self.stn.A_eq,self.stn.A_ineq))
+        B = np.vstack((self.stn.B_eq,self.stn.B_ineq))
+        # b = np.hstack((self.stn.b_eq.T,self.stn.b_ineq.T))
+        # b = np.array([b])
+        # b = b.T
+        D = A
+
+        # Constraints
+        # -----------
+        constraints = []
+        for i, row in enumerate(self.stn.A_ineq):
+             constraints.append( self.stn.A_ineq[i,:]*self.x + self.stn.B_ineq[i,:]*self.v +
+                                 np.sum( [self.Phi[k][i] for k in k_ix] ) <= self.stn.b_ineq[i] )
+
+        for i, row in enumerate(self.stn.A_eq):
+             constraints.append( self.stn.A_eq[i,:]*self.x + self.stn.B_eq[i,:]*self.v +
+                                 np.sum( [self.Phi[k][i+self.stn.m_ineq] for k in k_ix] ) == self.stn.b_eq[i] )
+
+        for k in k_ix:
+            constraints.append( np.ones((k_ix.__len__(),self.m))*np.diag(self.Psi[k]) >=
+                                ((B*self.Y + D)*self.W[k]).T )
+            constraints.append(self.Phi[k] >= 0)
+            constraints.append(self.Phi[k] <= self.x[k]*self.Psi_bar)
+            constraints.append(self.Psi[k] - self.Phi[k] >= 0)
+            constraints.append(self.Psi[k] - self.Phi[k] <= (1-self.x[k])*self.Psi_bar)
+
+        objective = cvx.Minimize(self.stn.c_x*self.x + self.stn.c_y*self.v)
+        self.robust_model = cvx.Problem(objective, constraints)
+
+
+if __name__ == '__main__':
+    from STN import *
+    stn = STN()
+    stn.solve()
+    rSTN = robust_STN(stn)
+    rSTN.W = rSTN.build_uncertainty_set_for_unit_delay()
+    rSTN.build_robust_counterpart()
+    rSTN.robust_model.solve(verbose=True, solver='GUROBI')
