@@ -4,6 +4,7 @@ __author__ = 'vujanicr'
 # STN class, when filling the x_ijt, y_ijt and y_st dictionaries with cvx.Variable objects.
 
 from STN import *
+import scipy
 
 class robust_STN(object):
     """ robust_STN uses the nominal STN model, and provides
@@ -28,7 +29,7 @@ class robust_STN(object):
         self.Phi = {}
         self.Psi = {}
         # TODO BIG-M for Psi_bar
-        self.Psi_bar = 10000*np.ones((self.m,1))
+        self.Psi_bar = 100000*np.ones((self.m,1))
 
         # uncertainty sets are stored as matrices, within a list of length n_x
         # (number of bools in the problem).
@@ -70,7 +71,7 @@ class robust_STN(object):
         :return: list of matrices [W_k], k=0,...,n_x-1
         """
         if to_t is None:
-            to_t = self.stn.T-delay
+            to_t = self.stn.T-delay-1
 
         W = [0 for x in range(self.stn.n_x)]
 
@@ -103,38 +104,36 @@ class robust_STN(object):
         k_ix = []  # list of indices with non-zero entries in W[k_ix]
         for k in range(self.stn.n_x):
             if np.any(self.W[k]):
-                # TODO do I need to iterate or can I assign a vector?
                 self.Phi[k] = cvx.Variable(self.m,1)
                 self.Psi[k] = cvx.Variable(self.m,1)
                 k_ix.append(k)
 
         # Aggregate Nominal Model
         # -----------------------
-        A = np.vstack((self.stn.A_eq,self.stn.A_ineq))
-        B = np.vstack((self.stn.B_eq,self.stn.B_ineq))
-        # b = np.hstack((self.stn.b_eq.T,self.stn.b_ineq.T))
-        # b = np.array([b])
-        # b = b.T
+        A = scipy.sparse.vstack((self.stn.A_eq,self.stn.A_ineq))
+        B = scipy.sparse.vstack((self.stn.B_eq,self.stn.B_ineq))
         D = A
 
         # Constraints
         # -----------
         constraints = []
-        for i, row in enumerate(self.stn.A_ineq):
-             constraints.append( self.stn.A_ineq[i,:]*self.x + self.stn.B_ineq[i,:]*self.v +
-                                 np.sum( [self.Phi[k][i] for k in k_ix] ) <= self.stn.b_ineq[i] )
-
         for i, row in enumerate(self.stn.A_eq):
              constraints.append( self.stn.A_eq[i,:]*self.x + self.stn.B_eq[i,:]*self.v +
-                                 np.sum( [self.Phi[k][i+self.stn.m_ineq] for k in k_ix] ) == self.stn.b_eq[i] )
+                                 np.sum( [self.Phi[k][i] for k in k_ix] ) == self.stn.b_eq[i] )
+        for i, row in enumerate(self.stn.A_ineq):
+             constraints.append( self.stn.A_ineq[i,:]*self.x + self.stn.B_ineq[i,:]*self.v +
+                                 np.sum( [self.Phi[k][i+self.stn.m_eq] for k in k_ix] ) <= self.stn.b_ineq[i] )
 
         for k in k_ix:
-            constraints.append( np.ones((k_ix.__len__(),self.m))*np.diag(self.Psi[k]) >=
-                                ((B*self.Y + D)*self.W[k]).T )
+            n_k = self.W[k].shape[1]
+            constraints.append( np.ones((n_k,self.m))*cvx.diag(self.Psi[k]) >= ((B*self.Y + D)*self.W[k]).T )
             constraints.append(self.Phi[k] >= 0)
             constraints.append(self.Phi[k] <= self.x[k]*self.Psi_bar)
             constraints.append(self.Psi[k] - self.Phi[k] >= 0)
             constraints.append(self.Psi[k] - self.Phi[k] <= (1-self.x[k])*self.Psi_bar)
+            # TODO: these following constraints help a lot computationally.
+            #constraints.append( self.v + self.Y*self.W[k][:,1] <=  np.max(self.stn.V_max))
+            #constraints.append( self.v + self.Y*self.W[k][:,1] >=  0)
 
         objective = cvx.Minimize(self.stn.c_x*self.x + self.stn.c_y*self.v)
         self.robust_model = cvx.Problem(objective, constraints)
