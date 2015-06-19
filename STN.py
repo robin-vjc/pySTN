@@ -254,7 +254,6 @@ class STN(object):
         a cvx.Problem type. Constraints can be added/removed here.
         :return: None
         """
-        print 'Constructing model...'
         # Constraints
         # -----------
         constraints = []
@@ -308,6 +307,7 @@ class STN(object):
         - STN.Y_st_inflow and Y_st_outflow (material flows, float)
         :return: optimal value (float)
         """
+        print 'Constructing nominal model...'
         self.construct_nominal_model()
         print 'Solving...'
         self.model.solve(verbose=True, solver='GUROBI')

@@ -5,6 +5,7 @@ __author__ = 'vujanicr'
 
 from STN import *
 import scipy
+import copy
 
 class robust_STN(object):
     """ robust_STN uses the nominal STN model, and provides
@@ -14,11 +15,11 @@ class robust_STN(object):
     - plotting
     """
     def __init__(self, stn=STN()):
-        """
-        :type stn: STN
-        """
         self.stn = stn
         self.m = self.stn.m_eq + self.stn.m_ineq
+        # uncertainty sets are stored as matrices, within a list of length n_x (number of bools
+        # in the problem).
+        self.W = []
 
         # Optimization Variables
         # ----------------------
@@ -31,9 +32,11 @@ class robust_STN(object):
         # TODO BIG-M for Psi_bar
         self.Psi_bar = 100000*np.ones((self.m,1))
 
-        # uncertainty sets are stored as matrices, within a list of length n_x
-        # (number of bools in the problem).
-        self.W = [0 for x in range(self.stn.n_x)]
+        # Attributes
+        # ----------
+        self.X_ijt = np.zeros((self.stn.I,self.stn.J,self.stn.T))
+        self.Y_ijt = np.zeros((self.stn.I,self.stn.J,self.stn.T))
+        self.Y_recourse = np.zeros((self.stn.n_y, self.stn.n_x))
 
     def x_ijt_index_to_std(self, x_ijt_ix):
         """ transforms the [i,j,t] index of the variable x_ijt in the index of the optimization variable
@@ -56,6 +59,59 @@ class robust_STN(object):
         j = int(remainder/(self.stn.T))
         t = int(remainder%(self.stn.T))
         return [i,j,t]
+
+    def solve(self):
+        if self.W == []:
+            print 'Uncertainty sets robust_STN.W are empty. Build them first.'
+            print '(call, e.g., robust_STN.W = robust_STN.build_uncertainty_set_for_unit_delay()).'
+        else:
+            print 'Constructing robust model...'
+            self.build_robust_counterpart()
+            print 'Solving...'
+            self.robust_model.solve(verbose=True, solver='GUROBI')
+            self.unpack_results()
+
+    def unpack_results(self):
+        for k in range(self.x.size[0]):
+            i,j,t = self.std_index_to_x_ijt(k)
+            self.X_ijt[i,j,t] = copy.deepcopy(self.x.value[k])
+            self.Y_ijt[i,j,t] = copy.deepcopy(self.v.value[k])
+        self.Y_recourse = copy.deepcopy(self.Y.value)
+
+    def plot_schedule(self):
+        """ Plot the robust schedule.
+        :return: None
+        """
+        # TODO you should plot the attained objective
+        color = 'blue'
+        margin = 0.03  # size of margins around the boxes
+
+        if not self.X_ijt.any():
+            print 'Please, solve model first by invoking robust_STN.solve()'
+        else:
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.set_aspect(1)
+            for i, unit in enumerate(self.Y_ijt):
+                unit_axis = np.array([i, i+1])
+                for j, task in enumerate(unit):
+                    for t, time in enumerate(task):
+                        if t < self.stn.T:
+                            slot_x = np.array([t+margin, t+self.stn.P_j[j]-margin])
+                            slot_y = np.array([i+margin, i+margin])
+                            slot_y2 = slot_y+0.90+margin
+                            # don't plot blocks where Y_ijt is just some epsilon, residual of the optimization
+                            if self.Y_ijt[i,j,t] >= 1:
+                                plt.fill_between(slot_x, slot_y, y2=slot_y2, color=color)
+                                plt.text(np.mean(slot_x), np.mean(unit_axis), "{0}\n{1}".format(self.Y_ijt[i,j,t], self.stn.tasks[j]),
+                                         horizontalalignment='center', verticalalignment='center' )
+                plt.text(-0.15, np.mean(unit_axis), "{0}".format(self.stn.units[i]),
+                         horizontalalignment='right', verticalalignment='center')
+
+            plt.ylim(self.stn.I, 0)
+            plt.xlabel('time [h]')
+            plt.yticks(range(self.stn.I), "", y=0.5)
+            plt.show()
 
     def build_uncertainty_set_for_unit_delay(self, units=(0,), tasks=(0,), delay=1, from_t=0, to_t=None):
         # TODO fix doc, it's tuple; you need a comma at the end if it is one single unit (cannot iterate otherwise)
@@ -132,12 +188,12 @@ class robust_STN(object):
             constraints.append(self.Psi[k] - self.Phi[k] >= 0)
             constraints.append(self.Psi[k] - self.Phi[k] <= (1-self.x[k])*self.Psi_bar)
             # TODO: these following constraints help a lot computationally.
-            #constraints.append( self.v + self.Y*self.W[k][:,1] <=  np.max(self.stn.V_max))
-            #constraints.append( self.v + self.Y*self.W[k][:,1] >=  0)
+            constraints.append( self.v + self.Y*self.W[k][:,1] <=  np.max(self.stn.V_max))
+            constraints.append( self.v + self.Y*self.W[k][:,1] >=  0)
+            # TODO: non-anticipativity
 
         objective = cvx.Minimize(self.stn.c_x*self.x + self.stn.c_y*self.v)
         self.robust_model = cvx.Problem(objective, constraints)
-
 
 if __name__ == '__main__':
     from STN import *
