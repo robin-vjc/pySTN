@@ -7,6 +7,8 @@ from STN import *
 import scipy
 import copy
 
+# TODO is there a reddit on PSE? chem E?
+
 class robust_STN(object):
     """ robust_STN uses the nominal STN model, and provides
     - example methods to construct appropriate uncertainty sets,
@@ -78,40 +80,11 @@ class robust_STN(object):
             self.Y_ijt[i,j,t] = copy.deepcopy(self.v.value[k])
         self.Y_recourse = copy.deepcopy(self.Y.value)
 
-    def plot_schedule(self):
+    def plot_schedule(self, color='blue', style='ggplot'):
         """ Plot the robust schedule.
         :return: None
         """
-        # TODO you should plot the attained objective
-        color = 'blue'
-        margin = 0.03  # size of margins around the boxes
-
-        if not self.X_ijt.any():
-            print 'Please, solve model first by invoking robust_STN.solve()'
-        else:
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
-            ax.set_aspect(1)
-            for i, unit in enumerate(self.Y_ijt):
-                unit_axis = np.array([i, i+1])
-                for j, task in enumerate(unit):
-                    for t, time in enumerate(task):
-                        if t < self.stn.T:
-                            slot_x = np.array([t+margin, t+self.stn.P_j[j]-margin])
-                            slot_y = np.array([i+margin, i+margin])
-                            slot_y2 = slot_y+0.90+margin
-                            # don't plot blocks where Y_ijt is just some epsilon, residual of the optimization
-                            if self.Y_ijt[i,j,t] >= 1:
-                                plt.fill_between(slot_x, slot_y, y2=slot_y2, color=color)
-                                plt.text(np.mean(slot_x), np.mean(unit_axis), "{0}\n{1}".format(self.Y_ijt[i,j,t], self.stn.tasks[j]),
-                                         horizontalalignment='center', verticalalignment='center' )
-                plt.text(-0.15, np.mean(unit_axis), "{0}".format(self.stn.units[i]),
-                         horizontalalignment='right', verticalalignment='center')
-
-            plt.ylim(self.stn.I, 0)
-            plt.xlabel('time [h]')
-            plt.yticks(range(self.stn.I), "", y=0.5)
-            plt.show()
+        plot_stn_schedule(self.stn, self.Y_ijt, color=color, style=style)  # imported with plotting
 
     def build_uncertainty_set_for_unit_delay(self, units=(0,), tasks=(0,), delay=1, from_t=0, to_t=None):
         # TODO fix doc, it's tuple; you need a comma at the end if it is one single unit (cannot iterate otherwise)
@@ -174,23 +147,30 @@ class robust_STN(object):
         # -----------
         constraints = []
         for i, row in enumerate(self.stn.A_eq):
-             constraints.append( self.stn.A_eq[i,:]*self.x + self.stn.B_eq[i,:]*self.v +
-                                 np.sum( [self.Phi[k][i] for k in k_ix] ) == self.stn.b_eq[i] )
+             constraints.append(self.stn.A_eq[i,:]*self.x + self.stn.B_eq[i,:]*self.v +
+                                np.sum([self.Phi[k][i] for k in k_ix]) == self.stn.b_eq[i])
         for i, row in enumerate(self.stn.A_ineq):
-             constraints.append( self.stn.A_ineq[i,:]*self.x + self.stn.B_ineq[i,:]*self.v +
-                                 np.sum( [self.Phi[k][i+self.stn.m_eq] for k in k_ix] ) <= self.stn.b_ineq[i] )
+             constraints.append(self.stn.A_ineq[i,:]*self.x + self.stn.B_ineq[i,:]*self.v +
+                                np.sum([self.Phi[k][i+self.stn.m_eq] for k in k_ix]) <= self.stn.b_ineq[i])
 
         for k in k_ix:
             n_k = self.W[k].shape[1]
-            constraints.append( np.ones((n_k,self.m))*cvx.diag(self.Psi[k]) >= ((B*self.Y + D)*self.W[k]).T )
+            constraints.append(np.ones((n_k,self.m))*cvx.diag(self.Psi[k]) >= ((B*self.Y + D)*self.W[k]).T)
             constraints.append(self.Phi[k] >= 0)
             constraints.append(self.Phi[k] <= self.x[k]*self.Psi_bar)
             constraints.append(self.Psi[k] - self.Phi[k] >= 0)
             constraints.append(self.Psi[k] - self.Phi[k] <= (1-self.x[k])*self.Psi_bar)
-            # TODO: these following constraints help a lot computationally.
-            constraints.append( self.v + self.Y*self.W[k][:,1] <=  np.max(self.stn.V_max))
-            constraints.append( self.v + self.Y*self.W[k][:,1] >=  0)
+            # TODO: the following constraints speed up computations.
+            constraints.append(self.v + self.Y*self.W[k][:,1] <=  np.max(self.stn.V_max))
+            constraints.append(self.v + self.Y*self.W[k][:,1] >=  0)
             # TODO: non-anticipativity
+            for t in range(self.stn.T):
+                for i in range (self.stn.I):
+                    for j in range(self.stn.J):
+                        for tt in range(t+1,self.stn.T):
+                            row = self.x_ijt_index_to_std([i,j,t])
+                            col = self.x_ijt_index_to_std([i,j,tt])
+                            constraints.append(self.Y[row,col] == 0)
 
         objective = cvx.Minimize(self.stn.c_x*self.x + self.stn.c_y*self.v)
         self.robust_model = cvx.Problem(objective, constraints)
@@ -201,5 +181,5 @@ if __name__ == '__main__':
     stn.solve()
     rSTN = robust_STN(stn)
     rSTN.W = rSTN.build_uncertainty_set_for_unit_delay()
-    rSTN.build_robust_counterpart()
-    rSTN.robust_model.solve(verbose=True, solver='GUROBI')
+    rSTN.solve()
+    rSTN.plot_schedule()

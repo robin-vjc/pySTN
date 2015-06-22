@@ -9,7 +9,7 @@ with exceedingly long signatures.
 
 import numpy as np
 import cvxpy as cvx
-import matplotlib.pyplot as plt
+from plotting import *
 
 class STN(object):
     def __init__(self):
@@ -336,40 +336,11 @@ class STN(object):
                 self.Y_st[s,t] = self.y_s[s].value + (sum([self.y_st_inflow[s,tt].value for tt in range(t+1)])
                                                       - sum([self.y_st_outflow[s,tt].value for tt in range(t+1)]))
 
-    def plot_schedule(self):
+    def plot_schedule(self, color='red', style='ggplot'):
         """ Plot the nominal schedule.
         :return: None
         """
-        # TODO you should plot the attained objective, and also (maybe) the states evolution, divided in input/int/output
-        color = 'red'
-        margin = 0.03  # size of margins around the boxes
-
-        if not self.X_ijt.any():
-            print 'Please, solve model first by invoking STN.solve()'
-        else:
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
-            ax.set_aspect(1)
-            for i, unit in enumerate(self.Y_ijt):
-                unit_axis = np.array([i, i+1])
-                for j, task in enumerate(unit):
-                    for t, time in enumerate(task):
-                        if t < self.T:
-                            slot_x = np.array([t+margin, t+self.P_j[j]-margin])
-                            slot_y = np.array([i+margin, i+margin])
-                            slot_y2 = slot_y+0.90+margin
-                            # don't plot blocks where Y_ijt is just some epsilon, residual of the optimization
-                            if self.Y_ijt[i,j,t] >= 1:
-                                plt.fill_between(slot_x, slot_y, y2=slot_y2, color=color)
-                                plt.text(np.mean(slot_x), np.mean(unit_axis), "{0}\n{1}".format(self.Y_ijt[i,j,t], self.tasks[j]),
-                                         horizontalalignment='center', verticalalignment='center' )
-                plt.text(-0.15, np.mean(unit_axis), "{0}".format(self.units[i]),
-                         horizontalalignment='right', verticalalignment='center')
-
-            plt.ylim(self.I, 0)
-            plt.xlabel('time [h]')
-            plt.yticks(range(self.I), "", y=0.5)
-            plt.show()
+        plot_stn_schedule(self, self.Y_ijt, color=color, style=style)  # imported with plotting
 
 if __name__ == '__main__':
     model = STN()
