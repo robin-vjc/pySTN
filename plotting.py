@@ -32,8 +32,9 @@ def plot_stn_schedule(STN, Y_ijt, color='red', style='ggplot'):
                         # don't plot blocks where Y_ijt is just some epsilon, residual of the optimization
                         if Y_ijt[i,j,t] >= 1:
                             plt.fill_between(slot_x, slot_y, y2=slot_y2, color=color)
-                            plt.text(np.mean(slot_x), np.mean(unit_axis), "{0}\n{1}".format(Y_ijt[i,j,t], STN.tasks[j]),
-                                     horizontalalignment='center', verticalalignment='center' )
+                            text = format(Y_ijt[i,j,t], '.2f').rstrip('0').rstrip('.')
+                            plt.text(np.mean(slot_x), np.mean(unit_axis), "{0}\n{1}".format(text, STN.tasks[j]),
+                                     horizontalalignment='center', verticalalignment='center')
             plt.text(-0.15, np.mean(unit_axis), "{0}".format(STN.units[i]),
                      horizontalalignment='right', verticalalignment='center')
 

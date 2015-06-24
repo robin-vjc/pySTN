@@ -39,6 +39,7 @@ class robust_STN(object):
         self.X_ijt = np.zeros((self.stn.I,self.stn.J,self.stn.T))
         self.Y_ijt = np.zeros((self.stn.I,self.stn.J,self.stn.T))
         self.Y_recourse = np.zeros((self.stn.n_y, self.stn.n_x))
+        self.Y_ijt_after_event = np.zeros((self.stn.I,self.stn.J,self.stn.T))
 
     def x_ijt_index_to_std(self, x_ijt_ix):
         """ transforms the [i,j,t] index of the variable x_ijt in the index of the optimization variable
@@ -62,7 +63,7 @@ class robust_STN(object):
         t = int(remainder%(self.stn.T))
         return [i,j,t]
 
-    def solve(self):
+    def solve(self, solver='GUROBI'):
         if self.W == []:
             print 'Uncertainty sets robust_STN.W are empty. Build them first.'
             print '(call, e.g., robust_STN.W = robust_STN.build_uncertainty_set_for_unit_delay()).'
@@ -70,7 +71,7 @@ class robust_STN(object):
             print 'Constructing robust model...'
             self.build_robust_counterpart()
             print 'Solving...'
-            self.robust_model.solve(verbose=True, solver='GUROBI')
+            self.robust_model.solve(verbose=True, solver=solver)
             self.unpack_results()
 
     def unpack_results(self):
@@ -80,13 +81,13 @@ class robust_STN(object):
             self.Y_ijt[i,j,t] = copy.deepcopy(self.v.value[k])
         self.Y_recourse = copy.deepcopy(self.Y.value)
 
-    def plot_schedule(self, color='blue', style='ggplot'):
+    def plot_schedule(self, color='orange', style='ggplot'):
         """ Plot the robust schedule.
         :return: None
         """
         plot_stn_schedule(self.stn, self.Y_ijt, color=color, style=style)  # imported with plotting
 
-    def build_uncertainty_set_for_unit_delay(self, units=(0,), tasks=(0,), delay=1, from_t=0, to_t=None):
+    def build_uncertainty_set_for_time_delay(self, units=(0,), tasks=(0,), delay=1, from_t=0, to_t=None):
         # TODO fix doc, it's tuple; you need a comma at the end if it is one single unit (cannot iterate otherwise)
         """ Returns the uncertainty sets corresponding to possible delays of any task (in `tasks') executed
         on a unit (in `units'). The delays amount to up to `delay' time steps. Note: this is not equivalent to
@@ -163,7 +164,7 @@ class robust_STN(object):
             # TODO: the following constraints speed up computations.
             constraints.append(self.v + self.Y*self.W[k][:,1] <=  np.max(self.stn.V_max))
             constraints.append(self.v + self.Y*self.W[k][:,1] >=  0)
-            # TODO: non-anticipativity
+            # non-anticipativity
             for t in range(self.stn.T):
                 for i in range (self.stn.I):
                     for j in range(self.stn.J):
@@ -171,15 +172,41 @@ class robust_STN(object):
                             row = self.x_ijt_index_to_std([i,j,t])
                             col = self.x_ijt_index_to_std([i,j,tt])
                             constraints.append(self.Y[row,col] == 0)
+            # TODO y_s0 should not have recourse either
 
         objective = cvx.Minimize(self.stn.c_x*self.x + self.stn.c_y*self.v)
         self.robust_model = cvx.Problem(objective, constraints)
+
+    def simulate_uncertain_event(self, event=1, column=1, color='yellow', style='ggplot'):
+        # events start from 1
+
+        self.Y_ijt_after_event[:,:,:] = 0
+        # 1) extract appropriate column from W
+        k_ix = []  # list of indices with non-zero entries in W[k_ix]
+        for k in range(self.stn.n_x):
+            if np.any(self.W[k]):
+                k_ix.append(k)
+
+        w = self.W[k_ix[event-1]][:,column]
+        w = np.array([w]).T
+
+        # 2) apply affine recourse
+        y_ijt_after_event = self.v.value[:self.stn.n_x] + self.Y.value[:self.stn.n_x,:]*w
+
+        # 3) paste result into self.Y_ijt_after_event
+        for k in range(self.stn.n_x):
+            i, j, t = self.std_index_to_x_ijt(k)
+            self.Y_ijt_after_event[i,j,t] = y_ijt_after_event[k]
+
+        plot_stn_schedule(self.stn, self.Y_ijt_after_event, color=color, style=style)
+
+
 
 if __name__ == '__main__':
     from STN import *
     stn = STN()
     stn.solve()
     rSTN = robust_STN(stn)
-    rSTN.W = rSTN.build_uncertainty_set_for_unit_delay()
+    rSTN.W = rSTN.build_uncertainty_set_for_time_delay()
     rSTN.solve()
     rSTN.plot_schedule()
