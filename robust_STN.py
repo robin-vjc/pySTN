@@ -129,6 +129,36 @@ class robust_STN(object):
         # to combine several different W's before computing the RC
         return W
 
+    def build_uncertainty_set_for_unit_swap(self, from_unit=2, to_unit=1, tasks=(1,), from_t=0, to_t=None):
+        if to_t is None:
+            to_t = self.stn.T-1
+
+        W = [0 for x in range(self.stn.n_x)]
+
+        for t in range(from_t, to_t):
+            # two columns
+            W_k = np.zeros((self.stn.n_x, 2))
+            # one column of the W_k matrix should always be 0, to encode that no event occurs;
+            # declaration left for clarity
+            W_k[:,0] = 0
+
+            # the other column encodes the desired unit swap
+            for j in tasks:
+                # uncertainty vector w is -1 at (from_unit,j,t), and +1 at (to_unit,j,t+1)
+                minus_index = self.x_ijt_index_to_std([from_unit,j,t])
+                plus_index = self.x_ijt_index_to_std([to_unit,j,t])
+                w = np.zeros(self.stn.n_x)
+                w[minus_index] = -1
+                w[plus_index] = +1
+                W_k[:,1] = w
+                # assign matrix to the collection (list) of uncertainties
+                W[minus_index] = W_k
+
+        # we return the value (and do not change self.W from within the method), since one may want
+        # to combine several different W's before computing the RC
+        return W
+
+
     def build_robust_counterpart(self):
         # fill in the required columns in Phi and Psi (can only be done after a W is constructed)
         k_ix = []  # list of indices with non-zero entries in W[k_ix]
@@ -164,15 +194,18 @@ class robust_STN(object):
             # TODO: the following constraints speed up computations.
             constraints.append(self.v + self.Y*self.W[k][:,1] <=  np.max(self.stn.V_max))
             constraints.append(self.v + self.Y*self.W[k][:,1] >=  0)
-            # non-anticipativity
-            for t in range(self.stn.T):
-                for i in range (self.stn.I):
-                    for j in range(self.stn.J):
-                        for tt in range(t+1,self.stn.T):
-                            row = self.x_ijt_index_to_std([i,j,t])
-                            col = self.x_ijt_index_to_std([i,j,tt])
-                            constraints.append(self.Y[row,col] == 0)
-            # TODO y_s0 should not have recourse either
+
+        # non-anticipativity
+        for t in range(self.stn.T):
+            for i in range (self.stn.I):
+                for j in range(self.stn.J):
+                    row = self.x_ijt_index_to_std([i,j,t])
+                    # loop over all necessary columns, forward in time
+                    for ii in range(self.stn.I):
+                        for jj in range(self.stn.J):
+                            for tt in range(t+1,self.stn.T):
+                                col = self.x_ijt_index_to_std([ii,jj,tt])
+                                constraints.append(self.Y[row,col] == 0)
 
         objective = cvx.Minimize(self.stn.c_x*self.x + self.stn.c_y*self.v)
         self.robust_model = cvx.Problem(objective, constraints)
