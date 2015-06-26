@@ -1,3 +1,4 @@
+__author__ = 'robin'
 """
 Implementation of a scheduling system based on the STN model. The data of the problem is
 in the __init__() method, and can be changed. Additional constraints can be included as functions
@@ -10,6 +11,7 @@ with exceedingly long signatures.
 import numpy as np
 import cvxpy as cvx
 from plotting import *
+
 
 class STN(object):
     def __init__(self):
@@ -128,11 +130,11 @@ class STN(object):
         self.m_ineq = 0
 
     def construct_allocation_constraint(self):
-        ''' construct the allocation constraints:
+        """ construct the allocation constraints:
             1) each unit i is processing at most one task j at each t
             2) units can only perform tasks that are compatible with self.J_i
         :return: list of cvx.Constraint
-        '''
+        """
         I = self.units.__len__()
         J = self.tasks.__len__()
         S = self.states.__len__()
@@ -342,7 +344,9 @@ class STN(object):
         """
         plot_stn_schedule(self, self.Y_ijt, color=color, style=style)  # imported with plotting
 
+
 if __name__ == '__main__':
+    # example use of the class
     model = STN()
     model.solve()
     model.plot_schedule()

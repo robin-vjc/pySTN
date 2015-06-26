@@ -1,26 +1,26 @@
-__author__ = 'vujanicr'
-# when constructing the uncertainty vectors, it is important to know the order of the variables
-# in the nominal problem in standard form; this is established in the __init__() method of the
-# STN class, when filling the x_ijt, y_ijt and y_st dictionaries with cvx.Variable objects.
+__author__ = 'robin'
+"""
+ A class that implements a rubstification of the nominal schedule towards uncertain events, such as unexpected
+ unit delays or swaps.
+"""
 
 from STN import *
 import scipy
 import copy
 
-# TODO is there a reddit on PSE? chem E?
 
 class robust_STN(object):
-    """ robust_STN uses the nominal STN model, and provides
-    - example methods to construct appropriate uncertainty sets,
-    - a method to build the Robust Counterpart (RC)
-    - a method to solve the RC
-    - plotting
+    """
+    calculate and plot a robust schedule
     """
     def __init__(self, stn=STN()):
+        """
+        :param stn: an instance of STN, of which the robust counterpart is to be determined
+        """
         self.stn = stn
         self.m = self.stn.m_eq + self.stn.m_ineq
-        # uncertainty sets are stored as matrices, within a list of length n_x (number of bools
-        # in the problem).
+        # uncertainty sets are stored as matrices within W, which is a list of length n_x
+        # (number of bools in the problem).
         self.W = []
 
         # Optimization Variables
@@ -36,6 +36,7 @@ class robust_STN(object):
 
         # Attributes
         # ----------
+        # these arrays store the results once the optimization is completed
         self.X_ijt = np.zeros((self.stn.I,self.stn.J,self.stn.T))
         self.Y_ijt = np.zeros((self.stn.I,self.stn.J,self.stn.T))
         self.Y_recourse = np.zeros((self.stn.n_y, self.stn.n_x))
@@ -63,42 +64,18 @@ class robust_STN(object):
         t = int(remainder%(self.stn.T))
         return [i,j,t]
 
-    def solve(self, solver='GUROBI'):
-        if self.W == []:
-            print 'Uncertainty sets robust_STN.W are empty. Build them first.'
-            print '(call, e.g., robust_STN.W = robust_STN.build_uncertainty_set_for_unit_delay()).'
-        else:
-            print 'Constructing robust model...'
-            self.build_robust_counterpart()
-            print 'Solving...'
-            self.robust_model.solve(verbose=True, solver=solver)
-            self.unpack_results()
-
-    def unpack_results(self):
-        for k in range(self.x.size[0]):
-            i,j,t = self.std_index_to_x_ijt(k)
-            self.X_ijt[i,j,t] = copy.deepcopy(self.x.value[k])
-            self.Y_ijt[i,j,t] = copy.deepcopy(self.v.value[k])
-        self.Y_recourse = copy.deepcopy(self.Y.value)
-
-    def plot_schedule(self, color='orange', style='ggplot'):
-        """ Plot the robust schedule.
-        :return: None
-        """
-        plot_stn_schedule(self.stn, self.Y_ijt, color=color, style=style)  # imported with plotting
-
     def build_uncertainty_set_for_time_delay(self, units=(0,), tasks=(0,), delay=1, from_t=0, to_t=None):
-        # TODO fix doc, it's tuple; you need a comma at the end if it is one single unit (cannot iterate otherwise)
         """ Returns the uncertainty sets corresponding to possible delays of any task (in `tasks') executed
         on a unit (in `units'). The delays amount to up to `delay' time steps. Note: this is not equivalent to
         delays of exactly `delay' time steps, the ``up to'' is important. A version for `exact delays', which
         for instance can model the swapping of a certain operation from day to night is also possible.
-        :param units: a (list of) unit(s) from STN.units (string); default='Heater'
-        :param tasks: a (list of) task(s) from STN.tasks (string); default='Heat'
-        :param delay: time delay, in steps (int); default=1
+        :param units: a tuple of units, indexed as they appear in STN.units (tuple);
+        it's important to pass also a single unit as a tuple (as in '(0,)'), since it needs to be iterable
+        :param tasks: a tuple of tasks from STN.tasks (tuple)
+        :param delay: time delay, in steps (int)
         :param from_t: delays may occur from time step ``from_t'' (int); default=0
         :param to_t: delays may occur only upt to time step ''to_t'' (int); default=STN.T
-        :return: list of matrices [W_k], k=0,...,n_x-1
+        :return: W, a list of matrices [W_k], k=0,...,n_x-1
         """
         if to_t is None:
             to_t = self.stn.T-delay-1
@@ -130,6 +107,14 @@ class robust_STN(object):
         return W
 
     def build_uncertainty_set_for_unit_swap(self, from_unit=2, to_unit=1, tasks=(1,), from_t=0, to_t=None):
+        """
+        :param from_unit: source unit of the swap; indexing according to the STN instance (int)
+        :param to_unit: destination unit; indexing according to the STN instance  (int)
+        :param tasks: which tasks are subject to swapping (tuple)
+        :param from_t: from which time step may a swap occur (int)
+        :param to_t: up to which time step a swap may occur (int)
+        :return: W, a list of matrices [W_k], k=0,...,n_x-1
+        """
         if to_t is None:
             to_t = self.stn.T-1
 
@@ -158,8 +143,12 @@ class robust_STN(object):
         # to combine several different W's before computing the RC
         return W
 
-
     def build_robust_counterpart(self):
+        """
+        builds the robust counterpart (constraints and objective), and stores it in the self.robust_model
+        attribute as a cvx.Problem
+        :return: None
+        """
         # fill in the required columns in Phi and Psi (can only be done after a W is constructed)
         k_ix = []  # list of indices with non-zero entries in W[k_ix]
         for k in range(self.stn.n_x):
@@ -210,8 +199,50 @@ class robust_STN(object):
         objective = cvx.Minimize(self.stn.c_x*self.x + self.stn.c_y*self.v)
         self.robust_model = cvx.Problem(objective, constraints)
 
+    def unpack_results(self):
+        """
+        once the robust counterpart is solved, store the results in self.X_ijt and self.Y_ijt for,
+        e.g., easier plotting
+        :return: None
+        """
+        for k in range(self.x.size[0]):
+            i,j,t = self.std_index_to_x_ijt(k)
+            self.X_ijt[i,j,t] = copy.deepcopy(self.x.value[k])
+            self.Y_ijt[i,j,t] = copy.deepcopy(self.v.value[k])
+        self.Y_recourse = copy.deepcopy(self.Y.value)
+
+    def solve(self, solver='GUROBI'):
+        """ attempts to solve the robust counterpart
+        :param solver: the list of available solvers can be obtained with `print cvx.installed_solvers()`
+        :return: None
+        """
+        if self.W == []:
+            print 'Uncertainty sets robust_STN.W are empty. Build them first.'
+            print '(call, e.g., robust_STN.W = robust_STN.build_uncertainty_set_for_unit_delay()).'
+        else:
+            print 'Constructing robust model...'
+            self.build_robust_counterpart()
+            print 'Solving...'
+            self.robust_model.solve(verbose=True, solver=solver)
+            self.unpack_results()
+
+    def plot_schedule(self, color='orange', style='ggplot'):
+        """ plotting
+        :return: None
+        """
+        plot_stn_schedule(self.stn, self.Y_ijt, color=color, style=style)  # imported with plotting
+
     def simulate_uncertain_event(self, event=1, column=1, color='yellow', style='ggplot'):
-        # events start from 1
+        """
+        computes the adjusted schedule according to a given event occurring, and plots it
+        :param event: index k of the event to be simulated
+        :param column: what column, in the matrix W_k extracted from the list W, should be simulated?
+        column=0 is the w=0 event (no event).
+        :param color: color of the plot
+        :param style: style; for available styles, see doc of plotting.py
+        :return: None
+        """
+        # TODO: instead of indexing by events, it may be better to index by [i,j,t]
 
         self.Y_ijt_after_event[:,:,:] = 0
         # 1) extract appropriate column from W
@@ -234,12 +265,14 @@ class robust_STN(object):
         plot_stn_schedule(self.stn, self.Y_ijt_after_event, color=color, style=style)
 
 
-
 if __name__ == '__main__':
+    # example use of the class
     from STN import *
     stn = STN()
     stn.solve()
+    stn.plot_schedule()
     rSTN = robust_STN(stn)
     rSTN.W = rSTN.build_uncertainty_set_for_time_delay()
     rSTN.solve()
     rSTN.plot_schedule()
+    rSTN.simulate_uncertain_event()
