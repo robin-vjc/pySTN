@@ -346,7 +346,7 @@ class STN(object):
 
 
 if __name__ == '__main__':
-    # example use of the class
+    # example usage of the class
     model = STN()
     model.solve()
     model.plot_schedule()
