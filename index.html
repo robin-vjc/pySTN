@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="chrome=1">
-    <title>pySTN by newrotik</title>
+    <title>pySTN by robin-vjc</title>
 
     <link rel="stylesheet" href="stylesheets/styles.css">
     <link rel="stylesheet" href="stylesheets/github-light.css">
@@ -18,23 +18,46 @@
         <h1>pySTN</h1>
         <p>Implementation of a scheduling system based on STN (State-Task-Network) models, with the possibility of robustification towards uncertain events.</p>
 
-        <p class="view"><a href="https://github.com/newrotik/pySTN">View the Project on GitHub <small>newrotik/pySTN</small></a></p>
+        <p class="view"><a href="https://github.com/robin-vjc/pySTN">View the Project on GitHub <small>robin-vjc/pySTN</small></a></p>
 
 
         <ul>
-          <li><a href="https://github.com/newrotik/pySTN/zipball/master">Download <strong>ZIP File</strong></a></li>
-          <li><a href="https://github.com/newrotik/pySTN/tarball/master">Download <strong>TAR Ball</strong></a></li>
-          <li><a href="https://github.com/newrotik/pySTN">View On <strong>GitHub</strong></a></li>
+          <li><a href="https://github.com/robin-vjc/pySTN/zipball/master">Download <strong>ZIP File</strong></a></li>
+          <li><a href="https://github.com/robin-vjc/pySTN/tarball/master">Download <strong>TAR Ball</strong></a></li>
+          <li><a href="https://github.com/robin-vjc/pySTN">View On <strong>GitHub</strong></a></li>
         </ul>
       </header>
       <section>
         <h1>
-<a id="robustipystn" class="anchor" href="#robustipystn" aria-hidden="true"><span class="octicon octicon-link"></span></a>robustipySTN</h1>
+<a id="pystn" class="anchor" href="#pystn" aria-hidden="true"><span class="octicon octicon-link"></span></a>pySTN</h1>
 
-<p>Implementation of a scheduling system based on STN (State-Task-Network) models, with the possibility of robustification towards uncertain events.</p>
+<p>Implementation of a robust scheduling system based on STN (State-Task-Network) models.</p>
+
+<h2>
+<a id="description" class="anchor" href="#description" aria-hidden="true"><span class="octicon octicon-link"></span></a>Description</h2>
+
+<p>This is supporting code to reproduce the results in [1].
+It allows the construction of a schedule optimizer according to the model in [2], and it also
+implements a robustification procedure that renders the schedules immune to uncertain events such as
+unit or tasks delays an swaps.</p>
+
+<h2>
+<a id="usage" class="anchor" href="#usage" aria-hidden="true"><span class="octicon octicon-link"></span></a>Usage</h2>
+
+<p>Please refer to <a href="./STN%20with%20Python.ipynb">this IPython notebook</a>.</p>
+
+<h2>
+<a id="references" class="anchor" href="#references" aria-hidden="true"><span class="octicon octicon-link"></span></a>References</h2>
+
+<ol>
+<li><p>R. Vujanic, P. Goulart, M. Morari, <em>A New Approach for Robust Optimization of Mixed–Integer Programs,
+with an Application to Scheduling</em>, June 2015, submitted.</p></li>
+<li><p>E. Kondili, C.C. Pantelides, and R.W.H. Sargent, <em>A general algorithm for short-term scheduling of batch
+operations - I. MILP formulation.</em>, Computers &amp; Chemical Engineering 17 (1993), no. 2, 211–227.</p></li>
+</ol>
       </section>
       <footer>
-        <p>This project is maintained by <a href="https://github.com/newrotik">newrotik</a></p>
+        <p>This project is maintained by <a href="https://github.com/robin-vjc">robin-vjc</a></p>
         <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
       </footer>
     </div>
