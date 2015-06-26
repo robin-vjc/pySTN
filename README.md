@@ -8,4 +8,4 @@ implements a robustification procedure that renders the schedules immune to unce
 unit or tasks delays an swaps.
 
 ## Usage
-Please refer to this [./STN with Python.ipynb](IPython notebook).
+Please refer to [this IPython notebook](./STN with Python.ipynb).
