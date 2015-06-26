@@ -5,7 +5,7 @@ Implementation of a robust scheduling system based on STN (State-Task-Network) m
 This is supporting code to reproduce the results in [1].
 It allows the construction of a schedule optimizer according to the model in [2], and it also
 implements a robustification procedure that renders the schedules immune to uncertain events such as
-unit or tasks delays an swaps.
+unit or tasks delays and swaps.
 
 ## Usage
 Please refer to [this IPython notebook](./STN with Python.ipynb).
