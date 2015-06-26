@@ -11,8 +11,8 @@ unit or tasks delays an swaps.
 Please refer to [this IPython notebook](./STN with Python.ipynb).
 
 ## References
-[1] R. Vujanic, P. Goulart, M. Morari, ``A New Approach for Robust Optimization of Mixed–Integer Programs,
-with an Application to Scheduling``, June 2015, submitted.
-[2] E. Kondili, C.C. Pantelides, and R.W.H. Sargent, ``A general algorithm for short-term scheduling of batch
-operations - I. MILP formulation.``, Computers & Chemical Engineering 17 (1993), no. 2, 211–227.
+[1] R. Vujanic, P. Goulart, M. Morari, *A New Approach for Robust Optimization of Mixed–Integer Programs,
+with an Application to Scheduling*, June 2015, submitted.
+[2] E. Kondili, C.C. Pantelides, and R.W.H. Sargent, *A general algorithm for short-term scheduling of batch
+operations - I. MILP formulation.*, Computers & Chemical Engineering 17 (1993), no. 2, 211–227.
 
