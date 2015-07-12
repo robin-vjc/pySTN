@@ -8,7 +8,7 @@ implements a robustification procedure that renders the schedules immune to unce
 unit or tasks delays and swaps.
 
 ## Usage
-Please refer to [this IPython notebook](./STN with Python.ipynb).
+Please refer to [this IPython notebook](http://nbviewer.ipython.org/github/robin-vjc/pySTN/blob/master/STN%20with%20Python.ipynb).
 
 ## References
 1. R. Vujanic, P. Goulart, M. Morari, *A New Approach for Robust Optimization of Mixed–Integer Programs,
