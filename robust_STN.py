@@ -232,26 +232,28 @@ class robust_STN(object):
         """
         plot_stn_schedule(self.stn, self.Y_ijt, color=color, style=style)  # imported with plotting
 
-    def simulate_uncertain_event(self, event=1, column=1, color='yellow', style='ggplot'):
+    # def simulate_uncertain_event(self, event=1, column=1, color='yellow', style='ggplot'):
+    def simulate_uncertain_event(self, event=[0,0,0], column=1, color='yellow', style='ggplot'):
         """
         computes the adjusted schedule according to a given event occurring, and plots it
-        :param event: index k of the event to be simulated
+        :param event: index [i,j,t] of the event to be simulated
         :param column: what column, in the matrix W_k extracted from the list W, should be simulated?
         column=0 is the w=0 event (no event).
         :param color: color of the plot
         :param style: style; for available styles, see doc of plotting.py
         :return: None
         """
-        # TODO: instead of indexing by events, it may be better to index by [i,j,t]
 
         self.Y_ijt_after_event[:,:,:] = 0
         # 1) extract appropriate column from W
-        k_ix = []  # list of indices with non-zero entries in W[k_ix]
-        for k in range(self.stn.n_x):
-            if np.any(self.W[k]):
-                k_ix.append(k)
+        #k_ix = []  # list of indices with non-zero entries in W[k_ix]
+        #for k in range(self.stn.n_x):
+        #    if np.any(self.W[k]):
+        #        k_ix.append(k)
 
-        w = self.W[k_ix[event-1]][:,column]
+        event_idx = self.x_ijt_index_to_std(event)
+        # w = self.W[k_ix[event-1`]][:,column]
+        w = self.W[event_idx][:,column]
         w = np.array([w]).T
 
         # 2) apply affine recourse
