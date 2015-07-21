@@ -245,14 +245,8 @@ class robust_STN(object):
         """
 
         self.Y_ijt_after_event[:,:,:] = 0
-        # 1) extract appropriate column from W
-        #k_ix = []  # list of indices with non-zero entries in W[k_ix]
-        #for k in range(self.stn.n_x):
-        #    if np.any(self.W[k]):
-        #        k_ix.append(k)
 
         event_idx = self.x_ijt_index_to_std(event)
-        # w = self.W[k_ix[event-1`]][:,column]
         w = self.W[event_idx][:,column]
         w = np.array([w]).T
 
