@@ -129,7 +129,7 @@ class robust_STN(object):
 
             # the other column encodes the desired unit swap
             for j in tasks:
-                # uncertainty vector w is -1 at (from_unit,j,t), and +1 at (to_unit,j,t+1)
+                # uncertainty vector w is -1 at (from_unit,j,t), and +1 at (to_unit,j,t)
                 minus_index = self.x_ijt_index_to_std([from_unit,j,t])
                 plus_index = self.x_ijt_index_to_std([to_unit,j,t])
                 w = np.zeros(self.stn.n_x)

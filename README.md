@@ -7,6 +7,11 @@ It allows the construction of a schedule optimizer according to the model in [2]
 implements a robustification procedure that renders the schedules immune to uncertain events such as
 unit or tasks delays and swaps.
 
+<p align="center">
+  <img src="./img/prod_net.png" alt="Production Network" width="40%"/>
+</p>
+
+
 ## Usage
 Please refer to [this IPython notebook](http://nbviewer.ipython.org/github/robin-vjc/pySTN/blob/master/STN%20with%20Python.ipynb).
 
@@ -14,5 +19,5 @@ Please refer to [this IPython notebook](http://nbviewer.ipython.org/github/robin
 1. R. Vujanic, P. Goulart, M. Morari, *Robust Optimization of Schedules Affected by Uncertain Events*, July 2015, submitted.
 
 2. E. Kondili, C.C. Pantelides, and R.W.H. Sargent, *A general algorithm for short-term scheduling of batch
-operations - I. MILP formulation.*, Computers & Chemical Engineering 17 (1993), no. 2, 211–227.
+operations - I. MILP formulation.*, Computers & Chemical Engineering 17 (1993), no. 2, 211ï¿½227.
 
