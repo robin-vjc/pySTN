@@ -9,6 +9,7 @@ unit or tasks delays and swaps.
 
 <p align="center">
   <img src="./img/prod_net.png" alt="Production Network" width="40%"/>
+  <img src="./img/schedules.png" alt="Schedules" width="40%"/>
 </p>
 
 
